@@ -6,77 +6,163 @@ Created on Wed Jun  2 19:05:49 2021
 """
 
 
-import pandas as pd
+iimport pandas as pd
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeRegressor
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import OneHotEncoder
 
-#learning_data_path = 'C:\Users\franc\Downloads\titanic\train.csv'
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
 
 training_data = pd.read_csv(r'C:\Users\franc\Downloads\titanic\train.csv')
 print(training_data.head())
 
-training_data= training_data.drop(['Ticket','Cabin'],axis=1)
+#the first few rows of the training data
+training_data.head()
 
-#to drop the NaN values
-training_data = training_data.dropna()
+#first few rows of the tes data
+test_data.head()
+
+training_data.info()
+
+test_data.info()
+
+#will give me an idea of the values im working with
+training_data.describe()
+
+for col in training_data.columns:
+    if training_data[col].nunique() < 10:
+        print( f"{col}: {training_data[col].unique()}")
+        
+training_data["Embarked"].value_counts() #seeing how many times each variable shows up
+#I will replace the rows with NAN values to be replaced with S since it shows up so many more times
+training_data["Embarked"].fillna("S", inplace=True)
+training_data["Embarked"].isnull().sum() # If this is zero that means that the NAN rows were filled successfully
+
+#im gonna graph the data in histograms
+import matplotlib.pyplot as plt
+training_data.hist(bins = 50, figsize = (20,20))
+plt.show()
 
 
-#gives you the table of index values
-#print(training_data.columns)
+training_data.isnull().sum()
+#I will drop cabin from the data
+#I can fill in the median age with imputation
 
-#the target variable. whether the passenger lives or not
-y = training_data.Survived
+#I want to fill the na data in the Age column
+median_age = training_data["Age"].median()
+print(median_age)
+training_data["Age"].fillna(median_age, inplace=True)
+training_data["Age"].isnull().sum() #if this line produces a zero then we have successfully replaced the NA rows
 
-#the input columns used (the features selected)
-features = ['SibSp','Parch','PassengerId']
+import seaborn as sns
+relationshipmatrix = sns.heatmap(training_data[["Survived","Pclass","Age","SibSp","Parch","Fare"]].corr(), annot=True)
+sns.set(rc={'figure.figsize':(20,20)})
 
-X = training_data[features]
+#survived and fare have the strongest relation
+#Pclass and Age have a strong negative corrolation however I'm not sure this info is useful
 
-train_X,val_X,train_y,val_y = train_test_split(X,y,random_state=0)
 
-#specifying the model then fitting it
-survival_model = DecisionTreeRegressor(random_state=1)
-survival_model.fit(train_X,train_y)
+#dropped_cols = ["PassengerId","Name","Cabin","Ticket"]
+dropped_cols = ["Name","Cabin","Ticket"]
+training_data = training_data.drop(dropped_cols, axis=1)
+training_data.head(10)
 
-#Make predictions then test predictions
-val_predictions = survival_model.predict(val_X)
-#Mean absolute error of the predictions
-val_mae = mean_absolute_error(val_predictions,val_y)
+test_data = test_data.drop(dropped_cols, axis=1)
+test_data.head(10)
+#columns that are not needed in the testing data are also dropped
 
-candidate_max_leaf_nodes = [5,25,50,100,250,500,1000,2000]
 
-#defining the getmae function
-def get_mae(max_leaf_nodes, train_X, val_X, train_y, val_y):
-    model = DecisionTreeRegressor(max_leaf_nodes=max_leaf_nodes, random_state=0)
-    model.fit(train_X, train_y)
-    preds_val = model.predict(val_X)
-    mae = mean_absolute_error(val_y, preds_val)
-    return(mae)
+median_test_age = test_data["Age"].median()
+test_data["Age"].fillna(median_test_age, inplace = True)
 
-#for loop to calculate the mae for the candidate max leaf node values    
-for max_leaf_nodes in candidate_max_leaf_nodes:
-    my_mae = get_mae(max_leaf_nodes, train_X, val_X, train_y, val_y)
-    print("Max leaf nodes: %d  \t\t Mean Absolute Error:  %d" %(max_leaf_nodes, my_mae))
+median_fare = test_data["Fare"].median()
+test_data["Fare"].fillna(median_fare, inplace = True)
+test_data.isnull().sum() #this means that the test_data has NAN values in age
+# I will try impute these age values
+#I will impute after building the rest of the model
+#I wonder how NAN values in the test_data will affect the prediction rate of the ML algorithm
 
-#store the lead nodes value with lowest cost
-scores = {leaf_size: get_mae(leaf_size, train_X, val_X, train_y, val_y) for leaf_size in candidate_max_leaf_nodes}
-print("\n",scores)
+number_of_men = training_data.loc[training_data.Sex == 'male']["Survived"]
+men_alive = sum(number_of_men)/len(number_of_men)
+print("proportion of men who survived is",men_alive)
 
-best_tree_size = max(scores, key=scores.get)
-print("\n", best_tree_size, scores[best_tree_size])
+number_of_women = training_data.loc[training_data.Sex == 'female']["Survived"]
+women_alive = sum(number_of_women)/len(number_of_women)
+print("proportion of men who survived is",women_alive)
 
-#using the lead nodes value with lowest cost which would be the first value from best_tree_size
-survival_model = DecisionTreeRegressor(max_leaf_nodes = 100)
-survival_model.fit(train_X,train_y)
-val_predictions = survival_model.predict(val_X)
-val_mae = mean_absolute_error(val_predictions,val_y)
-#so far we have made a model to make predictions. we must now test the data
 
-dt_model_on_full_data = DecisionTreeRegressor(random_state=1)
-dt_model_on_full_data.fit(train_X,train_y)
+y = training_data["Survived"] #this is the target column
+X = training_data.drop("Survived", axis=1) #this is the data without the target column
+X_val = test_data.drop("Embarked", axis=1) #I believe the useless columns were dropped
+X.head(10) 
 
-#test_data_path = 'C:\Users\franc\Downloads\titanic\test.csv'
-test_data = pd.read_csv(r'C:\Users\franc\Downloads\titanic\test.csv')
-test_X = test_data[features]
-test_preds = dt_model_on_full_data.predict(test_X)
+
+#I have to use OneHotEncoding on the Sex column
+
+X_train_gender = X["Sex"]
+train_array = pd.Series(X_train_gender)
+arr_train = train_array.values
+reshape_arr_train = arr_train.reshape((-1,1)) #This ensures that we only have two columns and many rows instead of 1 row
+
+#print(reshape_arr_train)
+
+X_val_gender = X_val["Sex"]
+val_array = pd.Series(X_val_gender)
+arr_val = val_array.values
+reshape_arr_val = arr_val.reshape((-1,1)) #This insures we have two columns and many rows instead of 1 row
+
+print(training_data.shape)
+print(test_data.shape)
+
+
+
+
+#X_train_gender.head()
+#X_val_gender.head()
+
+
+OH_encoder = OneHotEncoder(handle_unknown = 'ignore', sparse = False)
+OH_cols_train = pd.DataFrame(OH_encoder.fit_transform(reshape_arr_train))
+OH_cols_valid = pd.DataFrame(OH_encoder.transform(reshape_arr_val))
+
+#OH_cols_train.head()
+
+OH_cols_train.index = X.index
+OH_cols_valid.index = X_val.index
+
+
+num_X_train = X.drop(["Sex"], axis=1)
+num_X_val = X_val.drop(["Sex"], axis=1)
+
+OH_X_train = pd.concat([num_X_train, OH_cols_train], axis=1)
+OH_X_val = pd.concat([num_X_val, OH_cols_valid], axis=1)
+
+
+#I will drop Embarke for now till I decide how to use it to improve the model
+OH_X_train = OH_X_train.drop( ["Embarked"] ,axis=1)
+
+
+OH_X_train.rename(columns = {0:'Female',1:'Male'}, inplace =True )
+OH_X_val.rename(columns = {0:'Female',1:'Male'}, inplace = True)
+
+OH_X_train.head()
+#In the case of the new OneHotEncoded columns 1 is male and 0 is female. We know this because we printed reshape_arr_train.
+
+#training_data.head()
+
+
+OH_X_train.head()
+
+
+model = DecisionTreeClassifier(random_state=0)
+model.fit(OH_X_train,y)
+predictions = model.predict(OH_X_val)
+
+
+output = pd.DataFrame({'PassengerId': test_data.PassengerId, 'Survived': predictions})
+output.to_csv('my_submission.csv', index=False)
+print("Your submission was successfully saved!")
